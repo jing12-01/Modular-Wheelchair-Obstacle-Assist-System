@@ -1,7 +1,7 @@
 # Modular Wheelchair Obstacle Assist System
 
 ## Overview
-This project is a **functional physical prototype and CAD-based engineering system** designed to assist manual wheelchair users in overcoming small urban obstacles such as curbs and uneven terrain (approximately 2–10 cm).
+This project is a **functional physical prototype and SolidWorks-based engineering system** designed to assist manual wheelchair users in overcoming small urban obstacles such as curbs and uneven terrain (approximately 2–7 cm).
 
 The system combines **SolidWorks-based mechanical design, modular structural components, and a physical prototype implementation**, focusing on low-cost and mechanically simple assistive mobility solutions.
 
@@ -13,7 +13,7 @@ This is an **early-stage engineering prototype for concept validation**, not a c
 Manual wheelchair users often encounter mobility barriers in everyday environments, including:
 - Curbs and sidewalk elevation changes
 - Uneven pavement or road cracks
-- Small steps (2–10 cm range)
+- Small steps (2–7 cm range)
 
 These obstacles can significantly reduce independence and increase physical strain.
 
@@ -52,18 +52,10 @@ The prototype is used to evaluate:
 ## Engineering Validation
 
 The project includes early-stage engineering evaluation, including:
-- Static load considerations for structural design
 - Simplified force and motion reasoning for obstacle traversal
 - Design iteration based on mechanical constraints
 
 Further analysis and optimization (e.g., finite element analysis) are planned for future development.
-
----
-
-## Tools & Methods
-- SolidWorks (3D CAD design & assembly)
-- Mechanical prototyping (physical assembly)
-- Engineering documentation (development log / invention journal)
 
 ---
 
@@ -87,6 +79,16 @@ Further analysis and optimization (e.g., finite element analysis) are planned fo
 Early-stage functional prototype for engineering validation and design exploration.
 
 ---
+## Feedback & Collaboration
 
-## Author
-Independent engineering design project focused on assistive mobility systems and mechanical innovation.
+This project is an ongoing engineering exploration, and I welcome constructive feedback, critique, and suggestions for improvement.
+
+In particular, insights related to:
+- structural stability and load distribution
+- mechanical efficiency of the lifting mechanism
+- safety considerations in real-world use
+- modular attachment design improvements
+
+are highly appreciated.
+
+The goal of this project is continuous iteration and learning rather than a finalized product.
