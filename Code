@@ -1,0 +1,248 @@
+#include "TOF10120.h"
+#include <avr/wdt.h>
+#define pinStr 5
+#define pinFmq 6
+#define POLE_EXTEND 0
+#define POLE_RETRACT 1
+#define button_r 8
+#define button_l 7
+
+TOF10120 laser0(0);
+int num = 0;
+int mode = 0;
+int isShen = 1;
+
+uint16_t mm = 0;
+
+const unsigned long POLE_EXTEND_TIME_MS = 7000;
+const unsigned long READ_RESUME_DELAY_MS = 6000;
+const unsigned long SERIAL_PRINT_INTERVAL_MS = 100;
+const unsigned long BUTTON_DEBOUNCE_MS = 30;
+
+
+
+enum Mode1State {
+  MODE1_READING,
+  MODE1_ALERTING,
+  MODE1_EXTENDED,
+  MODE1_WAIT_AFTER_RETRACT
+};
+
+Mode1State mode1State = MODE1_READING;
+unsigned long mode1StateChangedAtMs = 0;
+unsigned long lastSerialPrintAtMs = 0;
+
+enum BuzzerPattern {
+  BUZZER_IDLE,
+  BUZZER_BUTTON_BEEP,
+  BUZZER_TRIPLE_BEEP
+};
+
+BuzzerPattern buzzerPattern = BUZZER_IDLE;
+unsigned long buzzerStartedAtMs = 0;
+bool buttonBeepPending = false;
+
+struct DebouncedButton {
+  uint8_t pin;               //引脚编号
+  bool rawState;             //读取的原始电平
+  bool stableState;          //防抖确认后的稳定电平
+  bool pressed;              //单次按下事件标志
+  unsigned long changedAtMs; //最后一次发生变化时的时间
+};
+
+DebouncedButton leftButton = {button_l, LOW, LOW, false, 0};
+DebouncedButton rightButton = {button_r, LOW, LOW, false, 0};
+
+void updateButton(DebouncedButton &button) {
+  bool rawState = digitalRead(button.pin);
+  unsigned long nowMs = millis();
+
+  button.pressed = false;
+
+  if(rawState != button.rawState){
+    button.rawState = rawState;
+    button.changedAtMs = nowMs;
+  }
+
+  if(rawState != button.stableState &&
+     nowMs - button.changedAtMs >= BUTTON_DEBOUNCE_MS){
+    button.stableState = rawState;
+    button.pressed = button.stableState == HIGH;
+  }
+}
+
+void isStretch(bool tag){
+  if(tag==0){
+    digitalWrite(pinStr, HIGH);
+  }
+  else{
+    digitalWrite(pinStr, LOW);
+  }
+}
+
+void startButtonBeep(){
+  if(buzzerPattern == BUZZER_TRIPLE_BEEP){
+    buttonBeepPending = true;
+    return;
+  }
+  buzzerPattern = BUZZER_BUTTON_BEEP;
+  buzzerStartedAtMs = millis();
+}
+
+void startTripleBeep(){
+  buzzerPattern = BUZZER_TRIPLE_BEEP;
+  buzzerStartedAtMs = millis();
+}
+
+void updateBuzzer(){
+  unsigned long elapsedMs = millis() - buzzerStartedAtMs;
+
+  if(buzzerPattern == BUZZER_BUTTON_BEEP){
+    if(elapsedMs < 200){
+      digitalWrite(pinFmq, HIGH);
+    }
+    else{
+      digitalWrite(pinFmq, LOW);
+      buzzerPattern = BUZZER_IDLE;
+    }
+    return;
+  }
+
+  if(buzzerPattern == BUZZER_TRIPLE_BEEP){
+    if(elapsedMs < 200 ||
+       (elapsedMs >= 300 && elapsedMs < 500) ||
+       (elapsedMs >= 600 && elapsedMs < 800)){
+      digitalWrite(pinFmq, HIGH);
+    }
+    else if(elapsedMs < 800){
+      digitalWrite(pinFmq, LOW);
+    }
+    else{
+      digitalWrite(pinFmq, LOW);
+      if(buttonBeepPending){
+        buttonBeepPending = false;
+        buzzerPattern = BUZZER_BUTTON_BEEP;
+        buzzerStartedAtMs = millis();
+      }
+      else{
+        buzzerPattern = BUZZER_IDLE;
+      }
+    }
+    return;
+  }
+
+  digitalWrite(pinFmq, LOW);
+}
+
+void anniu_left(){
+  if(leftButton.pressed){
+    startButtonBeep();
+    if(++mode == 2) mode = 0;
+    if(mode == 0) {
+      isShen = POLE_RETRACT;
+      mode1State = MODE1_WAIT_AFTER_RETRACT;
+      mode1StateChangedAtMs = millis();
+    }
+  }
+}
+
+void anniu_right(){
+  if(mode == 0){
+    if(rightButton.pressed){
+      startButtonBeep();
+      if(++isShen == 2) isShen = 0;
+    }
+  }
+  else if(mode == 1){
+    if(rightButton.pressed){
+      startButtonBeep();
+    }
+  }
+}
+
+
+
+
+//=====================================================================================================================
+
+
+
+
+void setup() {
+  MCUSR = 0;
+  wdt_disable();
+
+  pinMode(pinStr, OUTPUT);
+  pinMode(pinFmq, OUTPUT);
+  pinMode(button_l, INPUT);
+  pinMode(button_r, INPUT);
+
+  digitalWrite(pinStr, LOW);
+  digitalWrite(pinFmq, LOW);
+  leftButton.rawState = leftButton.stableState = digitalRead(button_l);
+  rightButton.rawState = rightButton.stableState = digitalRead(button_r);
+
+  Serial.begin(9600);
+  laser0.beginI2C();
+
+  wdt_enable(WDTO_2S);
+}
+
+void loop() {
+  wdt_reset();
+
+  updateButton(leftButton);
+  updateButton(rightButton);
+  updateBuzzer();
+  anniu_left();
+  anniu_right();
+
+  if(millis()>3000)
+    isStretch(isShen);
+
+  if(mode==1){
+    if(mode1State == MODE1_READING){
+      mm = laser0.readDistance();
+
+      if(mm != TOF10120::INVALID_DISTANCE && mm < 100){
+        delay(100);
+        mm = laser0.readDistance();
+        if(mm != TOF10120::INVALID_DISTANCE && mm < 100){
+          startTripleBeep();
+          mode1State = MODE1_ALERTING;
+          mode1StateChangedAtMs = millis();
+        }
+      }
+    }
+
+    else if(mode1State == MODE1_ALERTING &&
+            buzzerPattern == BUZZER_IDLE){
+      isShen = POLE_EXTEND;
+      mode1State = MODE1_EXTENDED;
+      mode1StateChangedAtMs = millis();
+    }
+
+    else if(mode1State == MODE1_EXTENDED &&
+            millis() - mode1StateChangedAtMs >= POLE_EXTEND_TIME_MS){
+      isShen = POLE_RETRACT;
+      mode1State = MODE1_WAIT_AFTER_RETRACT;
+      mode1StateChangedAtMs = millis();
+    }
+
+    else if(mode1State == MODE1_WAIT_AFTER_RETRACT &&
+            millis() - mode1StateChangedAtMs >= READ_RESUME_DELAY_MS){
+      mode1State = MODE1_READING;
+    }
+  }
+
+  if(millis() - lastSerialPrintAtMs >= SERIAL_PRINT_INTERVAL_MS){
+    lastSerialPrintAtMs = millis();
+    Serial.print("d:");
+    Serial.print(mm);
+    Serial.print("|mode:");
+    Serial.print(mode);
+    Serial.print("|shen:");
+    Serial.println(isShen);
+  }
+
+}
